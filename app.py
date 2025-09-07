@@ -1,31 +1,63 @@
-# app.py - Backblaze B2 + Render Server
-from flask import Flask, request, jsonify, send_file
-import requests
-import uuid
+# app.py - Backblaze B2 + Render Server (WITH ENHANCED ERROR HANDLING)
+import sys
 import os
-import tempfile
-import threading
-import time
-import b2sdk.v1 as b2
-from werkzeug.utils import secure_filename
-from concurrent.futures import ThreadPoolExecutor
-import json
+
+# Try to import required packages with error handling
+try:
+    from flask import Flask, request, jsonify, send_file
+    import requests
+    import uuid
+    import tempfile
+    import threading
+    import time
+    from werkzeug.utils import secure_filename
+    from concurrent.futures import ThreadPoolExecutor
+    import json
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Please ensure all required packages are installed")
+    sys.exit(1)
+
+# Try to import b2sdk with error handling
+try:
+    import b2sdk.v1 as b2
+except ImportError as e:
+    print(f"B2 SDK import error: {e}")
+    print("Trying to install setuptools...")
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "setuptools"])
+    try:
+        import b2sdk.v1 as b2
+    except ImportError:
+        print("Failed to import b2sdk even after installing setuptools")
+        sys.exit(1)
 
 app = Flask(__name__)
 
-# Initialize B2
-B2_KEY_ID = os.getenv('005a5f7a30471ab0000000001')
-B2_APPLICATION_KEY = os.getenv('K005Kz9sBC9kTrmQ/GW3Xa/088eJlDO')
-B2_BUCKET_NAME = os.getenv('backblaze-file-processor')
+# Initialize B2 - CORRECTED: Use environment variable names as strings
+B2_KEY_ID = os.getenv('B2_KEY_ID')                    # Will read from environment variable named 'B2_KEY_ID'
+B2_APPLICATION_KEY = os.getenv('B2_APPLICATION_KEY')  # Will read from environment variable named 'B2_APPLICATION_KEY'
+B2_BUCKET_NAME = os.getenv('B2_BUCKET_NAME')          # Will read from environment variable named 'B2_BUCKET_NAME'
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 524288000))  # 500MB
-CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 10485760))  # 10MB
+CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 10485760))          # 10MB
 MAX_CONCURRENT_CHUNKS = 5
 
-# Initialize B2 SDK
-info = b2.InMemoryAccountInfo()
-b2_stor = b2.B2Stor(info)
-b2_stor.authorize_account("production", B2_KEY_ID, B2_APPLICATION_KEY)
-b2_bucket = b2_stor.get_bucket_by_name(B2_BUCKET_NAME)
+# Validate environment variables
+if not all([B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME]):
+    print("Error: Missing required environment variables")
+    print("Please ensure B2_KEY_ID, B2_APPLICATION_KEY, and B2_BUCKET_NAME are set")
+    sys.exit(1)
+
+# Initialize B2 SDK with error handling
+try:
+    info = b2.InMemoryAccountInfo()
+    b2_stor = b2.B2Stor(info)
+    b2_stor.authorize_account("production", B2_KEY_ID, B2_APPLICATION_KEY)
+    b2_bucket = b2_stor.get_bucket_by_name(B2_BUCKET_NAME)
+    print("Successfully initialized B2 SDK")
+except Exception as e:
+    print(f"Error initializing B2 SDK: {e}")
+    sys.exit(1)
 
 # Active downloads tracking
 active_downloads = {}
@@ -77,31 +109,34 @@ class Chunk:
 @app.route('/download', methods=['POST'])
 def start_download():
     """Start a chunked download"""
-    data = request.json
-    url = data.get('url')
-    webhook_url = data.get('webhook_url')
-    metadata = data.get('metadata', {})
-    
-    if not url:
-        return jsonify({'error': 'URL is required'}), 400
-    
-    # Generate job ID
-    job_id = str(uuid.uuid4())
-    
-    # Create job
-    job = DownloadJob(job_id, url, webhook_url, metadata)
-    active_downloads[job_id] = job
-    
-    # Start download in background
-    thread = threading.Thread(target=process_download, args=(job_id,))
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'job_id': job_id,
-        'status': 'initiated',
-        'message': 'Download started'
-    })
+    try:
+        data = request.json
+        url = data.get('url')
+        webhook_url = data.get('webhook_url')
+        metadata = data.get('metadata', {})
+        
+        if not url:
+            return jsonify({'error': 'URL is required'}), 400
+        
+        # Generate job ID
+        job_id = str(uuid.uuid4())
+        
+        # Create job
+        job = DownloadJob(job_id, url, webhook_url, metadata)
+        active_downloads[job_id] = job
+        
+        # Start download in background
+        thread = threading.Thread(target=process_download, args=(job_id,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'initiated',
+            'message': 'Download started'
+        })
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 def process_download(job_id):
     """Process download in background"""
@@ -317,50 +352,56 @@ def merge_chunks(job_id):
 @app.route('/merge', methods=['POST'])
 def trigger_merge():
     """Manually trigger merge for a job"""
-    data = request.json
-    job_id = data.get('job_id')
-    
-    if not job_id:
-        return jsonify({'error': 'Job ID is required'}), 400
-    
-    job = active_downloads.get(job_id)
-    if not job:
-        return jsonify({'error': 'Job not found'}), 404
-    
-    if job.status != 'downloaded':
-        return jsonify({'error': 'Job not ready for merge'}), 409
-    
-    # Start merge in background
-    thread = threading.Thread(target=merge_chunks, args=(job_id,))
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'job_id': job_id,
-        'status': 'merging',
-        'message': 'Merge process started'
-    })
+    try:
+        data = request.json
+        job_id = data.get('job_id')
+        
+        if not job_id:
+            return jsonify({'error': 'Job ID is required'}), 400
+        
+        job = active_downloads.get(job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        
+        if job.status != 'downloaded':
+            return jsonify({'error': 'Job not ready for merge'}), 409
+        
+        # Start merge in background
+        thread = threading.Thread(target=merge_chunks, args=(job_id,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'merging',
+            'message': 'Merge process started'
+        })
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/status/<job_id>', methods=['GET'])
 def get_job_status(job_id):
     """Get job status"""
-    job = active_downloads.get(job_id)
-    if not job:
-        return jsonify({'error': 'Job not found'}), 404
-    
-    return jsonify(job.to_dict())
+    try:
+        job = active_downloads.get(job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        
+        return jsonify(job.to_dict())
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @app.route('/get/<job_id>', methods=['GET'])
 def get_merged_file(job_id):
     """Get merged file"""
-    job = active_downloads.get(job_id)
-    if not job:
-        return jsonify({'error': 'Job not found'}), 404
-    
-    if job.status != 'completed' or not job.merged_file:
-        return jsonify({'error': 'File not ready'}), 409
-    
     try:
+        job = active_downloads.get(job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        
+        if job.status != 'completed' or not job.merged_file:
+            return jsonify({'error': 'File not ready'}), 409
+        
         # Download merged file from B2
         merged_data = b2_bucket.download_file_by_name(job.merged_file)
         
@@ -389,11 +430,11 @@ def get_merged_file(job_id):
 @app.route('/cleanup/<job_id>', methods=['DELETE'])
 def cleanup_job(job_id):
     """Clean up job files"""
-    job = active_downloads.get(job_id)
-    if not job:
-        return jsonify({'error': 'Job not found'}), 404
-    
     try:
+        job = active_downloads.get(job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        
         # Delete chunks
         for chunk in job.chunks:
             chunk_name = f"{job_id}.chunk.{chunk.index:04d}"
@@ -444,5 +485,5 @@ def health_check():
     })
 
 if __name__ == '__main__':
-
+    print("Starting Flask application...")
     app.run(host='0.0.0.0', port=5000)
