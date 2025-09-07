@@ -35,9 +35,9 @@ except ImportError as e:
 app = Flask(__name__)
 
 # Initialize B2 - CORRECTED: Use environment variable names as strings
-B2_KEY_ID = os.getenv('B2_KEY_ID')                    # Will read from environment variable named 'B2_KEY_ID'
-B2_APPLICATION_KEY = os.getenv('B2_APPLICATION_KEY')  # Will read from environment variable named 'B2_APPLICATION_KEY'
-B2_BUCKET_NAME = os.getenv('B2_BUCKET_NAME')          # Will read from environment variable named 'B2_BUCKET_NAME'
+B2_KEY_ID = os.getenv('005a5f7a30471ab0000000001')                    # Will read from environment variable named 'B2_KEY_ID'
+B2_APPLICATION_KEY = os.getenv('K005Kz9sBC9kTrmQ/GW3Xa/088eJlDO')  # Will read from environment variable named 'B2_APPLICATION_KEY'
+B2_BUCKET_NAME = os.getenv('backblaze-file-processor')          # Will read from environment variable named 'B2_BUCKET_NAME'
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 524288000))  # 500MB
 CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 10485760))          # 10MB
 MAX_CONCURRENT_CHUNKS = 5
@@ -487,3 +487,4 @@ def health_check():
 if __name__ == '__main__':
     print("Starting Flask application...")
     app.run(host='0.0.0.0', port=5000)
+
