@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # Initialize B2
 B2_KEY_ID = os.getenv('005a5f7a30471ab0000000001')
-B2_APPLICATION_KEY = os.getenv(K005Kz9sBC9kTrmQ/GW3Xa/088eJlDO'')
+B2_APPLICATION_KEY = os.getenv('K005Kz9sBC9kTrmQ/GW3Xa/088eJlDO')
 B2_BUCKET_NAME = os.getenv('backblaze-file-processor')
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 524288000))  # 500MB
 CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 10485760))  # 10MB
@@ -444,4 +444,5 @@ def health_check():
     })
 
 if __name__ == '__main__':
+
     app.run(host='0.0.0.0', port=5000)
