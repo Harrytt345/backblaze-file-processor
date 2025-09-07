@@ -1,4 +1,4 @@
-# app.py - Backblaze B2 + Render Server (CORRECTED)
+# app.py - Backblaze B2 + Render Server (WITH CORRECT B2 SDK INITIALIZATION)
 import sys
 import os
 
@@ -48,12 +48,13 @@ if not all([B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME]):
     print("Please ensure B2_KEY_ID, B2_APPLICATION_KEY, and B2_BUCKET_NAME are set")
     sys.exit(1)
 
-# Initialize B2 SDK with error handling
+# Initialize B2 SDK with CORRECT initialization
 try:
+    # CORRECTED B2 SDK initialization
     info = b2.InMemoryAccountInfo()
-    b2_stor = b2.B2Stor(info)
-    b2_stor.authorize_account("production", B2_KEY_ID, B2_APPLICATION_KEY)
-    b2_bucket = b2_stor.get_bucket_by_name(B2_BUCKET_NAME)
+    service = b2.B2Service(info)
+    service.authorize_account("production", B2_KEY_ID, B2_APPLICATION_KEY)
+    b2_bucket = service.get_bucket_by_name(B2_BUCKET_NAME)
     print("Successfully initialized B2 SDK")
 except Exception as e:
     print(f"Error initializing B2 SDK: {e}")
